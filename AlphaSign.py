@@ -126,6 +126,7 @@ DOTC_ORANGE = '7'
 DOTC_YELLOW = '8'
 
 textcode = {}
+
 #fonts
 textcode[ '<5>' ] = FONT_5STD
 textcode[ '<5bold>' ] = FONT_5STROKE
@@ -137,6 +138,7 @@ textcode[ '<7wide>' ] = FONT_7WIDE
 textcode[ '<7huge>' ] = FONT_7WIDESTROKE
 textcode[ '<7shadow>' ] = FONT_7SHADOW
 textcode[ '<7fancy>' ] = FONT_7SLIMFANCY
+
 #colors
 textcode[ '<autocolor>' ] = COLOR_AUTO
 textcode[ '<red>' ] = COLOR_RED
@@ -150,8 +152,15 @@ textcode[ '<brown>' ] = COLOR_BROWN
 textcode[ '<mixcolor>' ] = COLOR_MIX
 textcode[ '<rainbow>' ] = COLOR_RAINBOW1
 textcode[ '<patchcolor>' ] = COLOR_RAINBOW2
+
+#modes
+textcode[ '<rotate>' ] = ALPHA_ESC + "0" + MODE_ROTATE
+textcode[ '<hold>' ] = ALPHA_ESC + "0" + MODE_HOLD
+textcode[ '<automode>' ] = ALPHA_ESC + "0" + MODE_AUTO
+
 #special characters
 textcode[ '<block>' ] = CHR_BLOCK
+
 #etc
 textcode[ '<clock>' ] = TEXT_CLOCK
 textcode[ '<slowest>' ] = SPEED_1
@@ -159,11 +168,6 @@ textcode[ '<fastest>' ] = TEXT_NOHOLD
 textcode[ '<string>' ] = TEXT_CALLSTRING
 textcode[ '<smalldots>' ] = TEXT_CALLSMALLDOTS
 textcode[ '<fixleft>' ] = TEXT_FIXLEFT
-textcode[ '<\\n>' ] = TEXT_NEWLINE
-
-#modes
-textcode[ '<rotate>' ] = ALPHA_ESC + "0" + MODE_ROTATE
-textcode[ '<hold>' ] = ALPHA_ESC + "0" + MODE_HOLD
 
 #speed
 textcode[ '<speed1>' ] = SPEED_1
@@ -174,13 +178,79 @@ textcode[ '<speed5>' ] = SPEED_5
 
 textcode[ '<flash>' ] = TEXT_FLASHON
 textcode[ '</flash>' ] = TEXT_FLASHOFF
+textcode[ '<\\n>' ] = TEXT_NEWLINE
+
+def preprocess( s ):
+	s = s.split("\n")
+	
+	validDicts = set(textcode_font, textcode_color, textcode_mode)
+	validTags = set([d.keys() for d in validDicts])
+	msg_lines = []
+	#for each line in the input string
+	for line in s:
+		#split the line on ':' and take the first part of the result
+		#then split that on  " " and strip whitespace, ignoring empty strings
+		tags = [tag.strip() for tag in line.split(":")[0].split(" ") if tag != ""]
+		
+		#two cases, there is a valid 'tag tag tag : message' sequence or there isn't
+		isValidTagSet = True
+		#iterate through the tags to see if it is valid
+		for tag in tags:
+			if not tag in validTags:
+				#if not, then there is no tag sequence and the defaults should be used
+				isValidTagSet = False
+				break
+		#if the tag set is valid, join the tags and replace with the control sequence
+		
+		if not isValidTagSet:
+			tags = ""
+			
+		DEFAULT_COLOR = "autocolor"
+		DEFAULT_MODE = "automode"
+		DEFAULT_FONT = "7"
+		
+		color_set = False
+		mode_set = False
+		font_set = False
+
+		for tag in tags:
+			if tag in textcode_color.keys():
+				color_set = True
+			elif tag in textcode_mode.keys():
+				mode_set = True
+			elif tag in textcode_mode.keys():
+				font_set = True
+			
+		if not color_set:
+			tags.append(DEFAULT_COLOR)
+
+		if not mode_set:
+			tags.append(DEFAULT_MODE)
+		
+		if not font_set:
+			tags.append(DEFAULT_FONT)
+
+
+		tags = " ".join(tags)
+
+		for code, decode in validDicts:
+	       		tags.replace(code, decode)
+       		 	
+		if isValidTagSet:
+			msg_lines.append(tags + line.split(":")[1:])
+		else:
+			msg_lines.append(tags + line)
+				
+		
+	return "".join(msg_lines)
 
 def encodeText ( s ):
-	s = s.replace( '\n', '' )
+	print s
 	for code, decode in textcode.iteritems():
-		s = s.replace( code, decode )
+		print "working on " + str(code)
+		s = s.replace(code, decode)
+		print s
 	return s
-
 
 class Sign:
 	"""interface to BetaBrite model 1036 on serial port"""
@@ -264,7 +334,7 @@ class Sign:
 		time.sleep( self.commwait )
 
 
-	def sendText ( self, label, msg, mode = MODE_HOLD ):
+	def sendText ( self, label, msg, mode = MODE_AUTO):
 		"""write a text file"""
 		if not label:
 			return
@@ -274,8 +344,8 @@ class Sign:
 			dat = dat + mode + msg
 		self.sendPacket( dat )
 	
-	def sendTextPriority ( self, msg = '', mode = MODE_HOLD ):
-		self.sendText( '0', msg[ : 125 ], mode )
+	def sendTextPriority ( self, msg = '', mode = MODE_HOLD):
+		self.sendText( '0', msg[ : 125 ], mode)
 
 	def getText ( self, label = '0', stripmode = True ):
 		self.sendPacket( 'B' + label ) # read text
@@ -290,7 +360,6 @@ class Sign:
 			else:
 				txt = txt[ 1: ] # strip normal mode
 		return txt
-
 
 	def sendString ( self, label, msg ):
 		"""write a string file"""
